@@ -37,7 +37,7 @@
 # Define variables
 # ----------------------------------------------------------------------
 # Variables for downloading Chronicling America
-chronicling_url := http://chroniclingamerica.loc.gov/data/ocr/
+chronicling_url := http://chroniclingamerica.loc.gov/data/word_coordinates/ocr/
 chronicling_dir := /media/data/public-bible/chronicling-america
 chronicling_batches := $(chronicling_dir)/chroniclingamerica.loc.gov/data/ocr
 news19c_issues := /media/data/newspapers-19c/NCNP

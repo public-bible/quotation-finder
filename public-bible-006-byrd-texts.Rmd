@@ -1,0 +1,21 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Get Jimmy Byrd's data into the format expected by our script.
+
+```{r setup}
+library(tidyverse)
+```
+
+```{r}
+files <- Sys.glob("~/Dropbox/Byrd - Civil War text files -Shared/*.txt")
+texts <- map_chr(files, read_file)
+ids <- basename(files)
+byrd_texts <- data_frame(pageid = ids, text = texts)
+saveRDS(byrd_texts, "data/byrd-texts.rds")
+```
+
+
+

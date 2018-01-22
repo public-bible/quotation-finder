@@ -43,6 +43,15 @@ args <- parse_args(parser)
 #   debug = TRUE,
 #   log = "console"
 # )
+args <- list(
+  input = "data/byrd-texts.rds",
+  output = "data/byrd-texts.feather",
+  quotation = "./bin/bible.rda",
+  model = "./bin/prediction-model.rds",
+  threshold = 0.2,
+  debug = TRUE,
+  log = "console"
+)
 
 stopifnot(file.exists(args$input))
 stopifnot(file.exists(args$model))
@@ -81,7 +90,7 @@ newspaper <- newspaper %>%
 log_debug("Creating the newspaper DTM")
 pages_it <- itoken(newspaper$tokens)
 newspaper_dtm <- create_dtm(pages_it, vocab_vectorizer(bible_vocab))
-rownames(newspaper_dtm) <- newspaper$page
+rownames(newspaper_dtm) <- newspaper$pageid
 
 # Extract the predictors from the DTM matrix
 log_debug("Extracting the predictors")
@@ -94,12 +103,20 @@ token_count <- tcrossprod(bible_dtm, newspaper_dtm) %>%
   tidy() %>% rename(token_count = value)
 
 log_debug("Getting the TFIDF score")
-idf <- get_idf(bible_dtm)
-tfidf <- tcrossprod(transform_tfidf(bible_dtm, idf), newspaper_dtm) %>%
+# idf <- get_idf(bible_dtm)
+# tfidf <- tcrossprod(transform_tfidf(bible_dtm, idf), newspaper_dtm) %>%
+#   tidy() %>% rename(tfidf = value)
+model_tfidf <- TfIdf$new()
+dtm_tfidf <- model_tfidf$fit_transform(bible_dtm)
+tfidf <- tcrossprod(dtm_tfidf, newspaper_dtm) %>%
   tidy() %>% rename(tfidf = value)
 
 log_debug("Getting the proportion of matches")
-proportion <- tcrossprod(transform_tf(bible_dtm),
+# proportion <- tcrossprod(transform_tf(bible_dtm),
+#                          transform_colsums(newspaper_dtm)) %>%
+#   tidy() %>% rename(proportion = value)
+
+proportion <- tcrossprod(normalize(bible_dtm, "l1"),
                          transform_colsums(newspaper_dtm)) %>%
   tidy() %>% rename(proportion = value)
 
@@ -112,6 +129,11 @@ scores <- token_count %>%
          page = as.character(page)) %>%
   tbl_df()
 log_debug(~ "There are ${nrow(scores)} potential matches")
+
+# Throw away unlikely matches
+all_scores <- scores
+scores <- scores %>%
+  filter(token_count > 1 | tfidf > 3)
 
 if (nrow(scores) == 0) {
   log_info("No potential matches: writing empty data frame and quitting early")
@@ -134,12 +156,15 @@ get_runs_pval <- function(df) {
   runs.test(as.factor(matches))$p.value
 }
 
-runs_df <- scores %>%
-  left_join(newspaper, by = "page") %>%
+# scores_try <- scores %>% sample_n(20)
+
+runs_df_temp <- scores %>%
+  left_join(newspaper, by = c("page" = "pageid")) %>%
   left_join(rename(bible_verses, bible_tokens = tokens), by = "reference") %>%
   select(-text) %>%
-  rowwise() %>%
-  do(runs_pval = get_runs_pval(.))
+  rowwise()
+
+runs_df <- runs_df_temp %>% do(runs_pval = get_runs_pval(.))
 
 scores <- scores %>%
   mutate(runs_pval = unlist(runs_df$runs_pval))
@@ -165,3 +190,4 @@ write_feather(output, args$output)
 
 log_info(~ "For ${nrow(newspaper)} pages, kept ${nrow(output)} out of ${nrow(scores)} possible")
 log_debug("Finished")
+
